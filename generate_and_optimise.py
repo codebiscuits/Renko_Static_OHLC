@@ -613,10 +613,7 @@ def walk_forward(s, c, train_length, test_length, printout=False):
     start = time.perf_counter()
 
     pairs_list = create_pairs_list('USDT')
-    pairs_list = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
-    training_list = []
-    train_froms = []
-    train_tos = []
+    # pairs_list = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
     for pair in pairs_list:
         if printout:
             print(f'Testing {pair}')
@@ -650,50 +647,6 @@ def walk_forward(s, c, train_length, test_length, printout=False):
                 if printout:
                     print('-' * 40)
                 i += 1
-                # training_list.append(results)
-                # train_froms.append(from_index)
-                # train_tos.append(to_index)
-
-
-    # testing_list = []
-    # test_froms = []
-    # test_tos = []
-    # for pair in pairs_list:
-    #     if printout:
-    #         print(f'Testing {pair}')
-    #     testing = True
-    #     i = 0
-    #     while testing:
-    #         print(f'testing {i}')
-    #         from_date, to_date = get_dates(i, train_length, test_length, 'test')
-    #         print(f'from: {from_date}, to: {to_date}')
-    #         price, vol = load_data(pair)
-    #         if to_date > len(price):
-    #             testing = False
-    #             to_date = len(price)
-    #             price = price[from_date:]
-    #             days = (len(price) / 1440)
-    #             # TODO recalculate vol
-    #         else:
-    #             price = price[from_date:to_date]
-    #             days = (len(price) / 1440)
-    #             # TODO recalculate vol
-    #         res_dict = backtest_range(s, c, price, vol)
-    #         results = optimise(res_dict, days, pair, 'test', i)
-    #         if printout:
-    #             print(f'Tests recorded: {len(results.index)}')
-    #         if len(results.index) > 0:
-    #             if printout:
-    #                 print(f'Best SQN: {results["sqn"].max()}')
-    #             best = results['sqn'].argmax()
-    #             if printout:
-    #                 print(f'Best settings: {results.iloc[best]}')
-    #         if printout:
-    #             print('-' * 40)
-    #         i += 1
-    #         testing_list.append(results)
-    #         test_froms.append(from_date)
-    #         test_tos.append(to_date)
 
     end = time.perf_counter()
     seconds = round(end - start)
@@ -780,7 +733,7 @@ def forward_run(pair, train_length, test_length, metric):
 timescale = '1m'
 
 s_low = 10
-s_hi = 600
+s_hi = 1000
 s_step = 5
 s = range(s_low, s_hi, s_step) # the range of brick sizes to be tested, in basis points
 c_low = 1
@@ -793,9 +746,9 @@ params = f'sizes{s_low}-{s_hi}-{s_step}_confs{c_low}-{c_hi}'
 
 # single_test('BTCUSDT', 190, 1, 500)
 
-# walk_forward(s, c, 80000, 2000)
+walk_forward(s, c, 80000, 2000)
 
-forward_run('BTCUSDT', 80000, 2000, 'win rate')
+# forward_run('BTCUSDT', 80000, 2000, 'win rate')
 
 #TODO it seems as though 1 brick confirmation is best in almost all situations, so at some point i will have to rewrite
 # everything to remove all references to the optimisation of confs
