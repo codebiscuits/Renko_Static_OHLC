@@ -224,40 +224,46 @@ def backtest_one(confs, bricks, price, tot_vol, printout=False):
     if printout:
         print(f'colour_list: {colour_list}')
     for i in range(confs, len(colour_list)):  # iterate through list of bricks, starting at first potential trend confirmation
-        sell_condition = sum(colour_list[i - confs:i + 1]) == 0 and prev == 1 and position == 'long'
-        buy_condition = sum(colour_list[i - confs:i + 1]) == confs and prev == 0 and position == 'short'
-        initial_sell_cond = sum(colour_list[i - confs:i + 1]) == 0
-        initial_buy_cond = sum(colour_list[i - confs:i + 1]) == confs
+        ohlc_limit = index_list[i+1] if i < (len(index_list)-1) else index_list[-1] # no slippage allowed past the signal brick
+        sell_condition = sum(colour_list[i - (confs-1):i + 1]) == 0 and prev == 1 and position == 'long'
+        buy_condition = sum(colour_list[i - (confs-1):i + 1]) == confs and prev == 0 and position == 'short'
+        initial_sell_cond = sum(colour_list[i - (confs-1):i + 1]) == 0
+        initial_buy_cond = sum(colour_list[i - (confs-1):i + 1]) == confs
         if printout:
+            print('-' * 80)
             print(f'i: {i}')
-            print(f'sum: {sum(colour_list[i-confs:i+1])}, prev: {prev}')
+            print(f'price index: {index_list[i]}')
+            print(f'sum_bricks: {sum(colour_list[i-confs:i+1])}, prev: {prev}')
         if prev == None:
-            if initial_sell_cond: # if the last 'num' bricks were red and preceded by none
-                ##########
-                ohlc_index = index_list[i] + 1
-                trade_vol = 0
-                cash = comm * asset * close_list[i]
-                while trade_vol < cash and ohlc_index < len(vol_list)-1:
-                    trade_vol += vol_list[ohlc_index]
-                    trade_vol /= 2 # volume figures are for buys and sells combined, i can only draw on half the liquidity
-                    ohlc_index += 1
-                cash = comm * asset * price[ohlc_index]
-                equity_curve.append(cash)
-                ##########
-                if printout:
-                    print(f'sold {asset:.2f} units at {price[ohlc_index]}, commision: {(fees * cash):.3f}')
-                trade_list.append((i, 's', price[ohlc_index]))  # record a sell signal
-                position = 'short'
-                prev = 0  # update prev
+            # initial sell condition won't be useful until ive implemented shorting logic
+            # if initial_sell_cond: # if the last 'num' bricks were red and preceded by none
+            #     ohlc_index = index_list[i] + 1
+            #     print(f'ohlc_index before: {ohlc_index}') ####
+            #     trade_vol = 0
+            #     cash = comm * asset * close_list[i]
+            #     while trade_vol < cash and ohlc_index < (len(vol_list)-1 and ohlc_limit):
+            #         trade_vol += vol_list[ohlc_index]
+            #         trade_vol /= 2 # volume figures are for buys and sells combined, i can only draw on half the liquidity
+            #         ohlc_index += 1
+            #     print(f'ohlc_index after: {ohlc_index}, trade_vol: {trade_vol}, cash: {cash}')
+            #     cash = comm * asset * price[ohlc_index]
+            #     equity_curve.append(cash)
+            #     if printout:
+            #         print(f'sold {asset:.2f} units at {price[ohlc_index]}, commision: {(fees * cash):.3f}')
+            #     trade_list.append((i, 's', price[ohlc_index]))  # record a sell signal
+            #     position = 'short'
+            #     prev = 0  # update prev
             if initial_buy_cond: # if the last 'num' bricks were green and preceded by none
                 ohlc_index = index_list[i] + 1
+                # print(f'ohlc_index before: {ohlc_index}') ####
                 trade_vol = 0
                 asset = cash * comm / close_list[i]
                 cash_value = comm * asset * close_list[i] # position is in base currency but volume is given in quote
-                while trade_vol < cash_value and ohlc_index < len(vol_list)-1:
+                while trade_vol < cash_value and ohlc_index < len(vol_list)-1 and  ohlc_index < ohlc_limit:
                     trade_vol += vol_list[ohlc_index]
                     trade_vol /= 2  # volume figures are for buys and sells combined, i can only draw on half the liquidity
                     ohlc_index += 1
+                # print(f'ohlc_index after: {ohlc_index}, trade_vol: {trade_vol}, cash: {cash}')
                 asset = cash * comm / price[ohlc_index]
                 if printout:
                     print(f'bought {asset:.2f} units at {price[ohlc_index]}, commision: {(fees * cash):.3f}')
@@ -269,13 +275,15 @@ def backtest_one(confs, bricks, price, tot_vol, printout=False):
                 ohlc_index = index_list[i] + 1 # this line causes out of index error on its own
             else:
                 break
+            # print(f'ohlc_index before: {ohlc_index}') ####
             trade_vol = 0
             cash = comm * asset * close_list[i]
             mins = 1
-            while trade_vol < cash and ohlc_index < len(vol_list)-1:
+            while trade_vol < cash and ohlc_index < len(vol_list)-1 and  ohlc_index < ohlc_limit:
                 mins += 1
                 trade_vol += vol_list[ohlc_index] / 2  # volume figures are for buys and sells combined, i can only draw on half the liquidity
                 ohlc_index += 1
+            # print(f'ohlc_index after: {ohlc_index}, trade_vol: {trade_vol}, cash: {cash}')
             cash = comm * asset * price[ohlc_index]
             equity_curve.append(cash)
             if printout:
@@ -288,20 +296,25 @@ def backtest_one(confs, bricks, price, tot_vol, printout=False):
                 ohlc_index = index_list[i] + 1 # this line causes out of index error on its own
             else:
                 break
+            # print(f'ohlc_index before: {ohlc_index}') ####
             trade_vol = 0
             asset = cash * comm / close_list[i]
             cash_value = comm * asset * close_list[i]  # position is in base currency but volume is given in quote
             mins = 1
-            while trade_vol < cash_value and ohlc_index < len(vol_list)-1:
+            while trade_vol < cash_value and ohlc_index < len(vol_list)-1 and  ohlc_index < ohlc_limit:
                 mins += 1
                 trade_vol += vol_list[ohlc_index] / 2  # volume figures are for buys and sells combined, i can only draw on half the liquidity
                 ohlc_index += 1
+            # print(f'ohlc_index after: {ohlc_index}, trade_vol: {trade_vol}, cash: {cash}')
             asset = cash * comm / price[ohlc_index]
             if printout:
                 print(f'bought {asset:.2f} units at {price[ohlc_index]}, commision: {(fees * cash):.3f}')
             trade_list.append((i, 'b', price[ohlc_index]))  # record a buy signal
             position = 'long'
             prev = 1  # update prev
+        if printout:
+            if equity_curve:
+                print(equity_curve[-1])
     if printout:
         print(f'Number of trades: {len(trade_list)}')
 
@@ -321,7 +334,7 @@ def backtest_one(confs, bricks, price, tot_vol, printout=False):
         std_run = 0
     vol_per_trade = sum(tot_vol) / len(tot_vol)
     score = avg_run/ (len(run_list)+1) * vol_per_trade
-    # print(f'Score: {round(score)}')
+    # print(f'backtest eq curve: {equity_curve}')
     return {'trades': trade_list, 'equity curve': equity_curve, 'avg run': avg_run, 'std run': std_run, 'brick score': score}
 
 ### backtest_range calls create_bricks using a range of brick sizes and then creates a list of 'signals' for each setting
@@ -352,7 +365,7 @@ def backtest_range(sizes, confs, price, tot_vol):
             'avg run': avg_run_list, 'std run': std_run_list, 'score': score_list}
 
 ### optimise takes signals from backtest_range and returns a dataframe of results and statistics
-def optimise(signals, days, pair, set=None, set_num=None):
+def optimise(signals, days, pair, train_str, set=None, set_num=None):
     size_list = []
     conf_list = []
     trad_list = []
@@ -422,7 +435,7 @@ def optimise(signals, days, pair, set=None, set_num=None):
                 avg_loss = 0
 
             trades_per_day = len(equity_curve) / days
-            prof_per_day = profit / days
+            prof_per_day = profit / days #TODO this should use a logarithm
 
             sx = signals.get('sizes')[x]
             cx = signals.get('confs')[x]
@@ -447,7 +460,8 @@ def optimise(signals, days, pair, set=None, set_num=None):
     results_df = pd.DataFrame(results)
 
     if set:
-        res_path = Path(f'V:/results/renko_static_ohlc/walk-forward/{params}/{pair}')
+        res_path = Path(f'V:/results/renko_static_ohlc/walk-forward/{train_str}/{params}/{pair}')
+
         res_name = Path(f'{set}_{set_num}.csv')
     else:
         res_path = Path(f'V:/results/renko_static_ohlc/backtest/{params}')
@@ -460,27 +474,29 @@ def optimise(signals, days, pair, set=None, set_num=None):
 
 ### calculate takes signals from backtest and prints out results and statistics
 def calculate(signals, days):
+    equity_curve = signals.get('equity curve')
     startcash = 1000
-    cash = startcash
+    cash = equity_curve[-1]
     asset = 0
     fees = 0.00075
     comm = 1 - fees
-    equity_curve = []
-    if signals.get('trades')[0][1] == 's':
-        r = range(1, len(signals.get('trades')))
-    else:
-        r = range(len(signals.get('trades')))
 
-    for i in r:
-        sig = signals.get('trades')[i][1]
-        price = signals.get('trades')[i][2]
-        if sig == 'b':
-            asset = cash * comm / price
-            # print(f'bought {asset:.2f} units at {price}, commision: {(fees * cash):.3f}')
-        else:
-            cash = comm * asset * price
-            equity_curve.append(cash)
-            # print(f'sold {asset:.2f} units at {price}, commision: {(fees * cash):.3f}')
+    # this block creates the eq curve list, not needed now
+    # equity_curve = []
+    # if signals.get('trades')[0][1] == 's':
+    #     r = range(1, len(signals.get('trades')))
+    # else:
+    #     r = range(len(signals.get('trades')))
+    # for i in r:
+    #     sig = signals.get('trades')[i][1]
+    #     price = signals.get('trades')[i][2]
+    #     if sig == 'b':
+    #         asset = cash * comm / price
+    #         # print(f'bought {asset:.2f} units at {price}, commision: {(fees * cash):.3f}')
+    #     else:
+    #         cash = comm * asset * price
+    #         equity_curve.append(cash)
+    #         # print(f'sold {asset:.2f} units at {price}, commision: {(fees * cash):.3f}')
 
     if len(equity_curve) > 5 and statistics.stdev(equity_curve) > 0 and days > 0:
         profit = (100 * (cash - startcash) / startcash)
@@ -503,11 +519,11 @@ def calculate(signals, days):
         winrate = round(100 * wins / (wins + losses))
 
         trades_per_day = len(equity_curve) / days
-        prof_per_day = profit / days
+        prof_per_day = profit / days #TODO this really should be using some kind of logarithm or something
 
         print(f'{len(equity_curve)} round-trip trades, Profit: {profit:.6}%')
-        print(f'SQN: {sqn:.3}, win rate: {winrate}%, avg trades/day: {trades_per_day:.3}, avg profit/day: {prof_per_day:.3}')
-        return(equity_curve)
+        print(f'SQN: {sqn:.3}, win rate: {winrate}%, avg trades/day: {trades_per_day:.3}, avg profit/day: {prof_per_day:.3}%')
+        # return equity_curve
 
 ### draw_bars plots the renko bricks on a chart
 def draw_bars(data, num_bars=0):
@@ -556,20 +572,16 @@ def single_test(pair, size, confs, num_bars=0):
     price, vol = load_data(pair)
     bricks = create_bricks(size, price, vol) # size is in basis points
     results = backtest_one(confs, bricks, price, vol)
-    # for i in results['equity curve']:
-    #     print(round(i, 2))
+    print(results)
     days = len(price) / 1440
     calculate(results, days)
     draw_bars(bricks, num_bars)
+    plot_eq(results.get('equity curve'), pair, 'sqn')
 
 ### test_all uses the above functions to test a range of params
 def test_all(s, c, printout=False):
     print(f'Starting tests at {time.ctime()[11:-8]}')
     start = time.perf_counter()
-
-    # Path(f'V:/results').mkdir(exist_ok=True)  # creates the folder if it doesn't already exist
-    # Path(f'V:/results/renko_static_ohlc').mkdir(exist_ok=True)
-    # Path(f'V:/results/renko_static_ohlc/{params}').mkdir(exist_ok=True)
 
     pairs_list = create_pairs_list('USDT')
     # pairs_list = ['RLCUSDT']
@@ -601,7 +613,7 @@ def walk_forward(s, c, train_length, test_length, printout=False):
     start = time.perf_counter()
 
     pairs_list = create_pairs_list('USDT')
-    pairs_list = ['ETHUSDT', 'BNBUSDT']
+    pairs_list = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
     training_list = []
     train_froms = []
     train_tos = []
@@ -625,7 +637,8 @@ def walk_forward(s, c, train_length, test_length, printout=False):
                 vol = vol[from_index:to_index]
                 days = (len(price) / 1440)
                 res_dict = backtest_range(s, c, price, vol)
-                results = optimise(res_dict, days, pair, 'train', i)
+                train_string = f'{train_length//1000}k-{test_length//1000}k'
+                results = optimise(res_dict, days, pair, train_string, 'train', i)
                 if printout:
                     print(f'Tests recorded: {len(results.index)}')
                 if len(results.index) > 0:
@@ -686,8 +699,8 @@ def walk_forward(s, c, train_length, test_length, printout=False):
     seconds = round(end - start)
     print(f'Time taken: {seconds // 60} minutes, {seconds % 60} seconds')
 
-def load_results(pair):
-    folder = Path(f'V:/results/renko_static_ohlc/walk-forward/sizes10-1000-5_confs1-2/{pair}')
+def load_results(pair, train_str):
+    folder = Path(f'V:/results/renko_static_ohlc/walk-forward/{train_str}/sizes10-600-5_confs1-2/{pair}')
     files_list = list(folder.glob('*.csv'))
     set_num_list = [int(file.stem[6:]) for file in files_list]
     names_list = [file.name for file in files_list]
@@ -718,6 +731,7 @@ def plot_eq(eq_curve, pair, metric):
 
     plt.xlabel('Trades')
     plt.ylabel('Equity')
+    plt.yscale('log')
     plt.title(f'{pair} optimised by {metric}')
     plt.show()
 
@@ -730,9 +744,12 @@ def forward_run(pair, train_length, test_length, metric):
     price = price[train_length:]  # forward test starts from the beginning of the first test period
     vol = vol[train_length:]
     days = len(price) / 1440
+    train_string = f'{train_length // 1000}k-{test_length // 1000}k'
+    # print(train_string)
 
     # call load_results to get walk-forward test results
-    df_dict = load_results(pair)
+    df_dict = load_results(pair, train_string)
+    print(df_dict)
 
     # call get_best to get settings for each period for a particular metric
     best = get_best(metric, df_dict)
@@ -740,26 +757,30 @@ def forward_run(pair, train_length, test_length, metric):
 
     # call create create_bricks_forward to generate the renko chart
     bricks = create_bricks_forward(best, price, vol, test_length)
+    print(bricks)
 
     # call backtest_one to generate the signals
     backtest = backtest_one(1, bricks, price, vol)
+    # print(f'backtest: {backtest}')
+
+    #TODO the eq curve in calculate works, the one in backtest doesn't. backtest is the important one because that's
+    # where the liquidity limiter is. get the one in backtest working, then remove the one in calculate
 
     # call calculate to generate final results
-    eq = calculate(backtest, days)
-    print(eq)
+    calculate(backtest, days)
 
     # call draw_bricks to draw renko chart
     draw_bars(bricks, 500)
 
     # chart the equity curves of the different optimisation metrics
-    plot_eq(eq, pair, metric)
+    plot_eq(backtest.get('equity curve'), pair, metric)
 
 ### run tests
 
 timescale = '1m'
 
 s_low = 10
-s_hi = 1000
+s_hi = 600
 s_step = 5
 s = range(s_low, s_hi, s_step) # the range of brick sizes to be tested, in basis points
 c_low = 1
@@ -770,16 +791,11 @@ params = f'sizes{s_low}-{s_hi}-{s_step}_confs{c_low}-{c_hi}'
 # s, c = [100], [0]
 # test_all(s, c, True)
 
-# single_test('TROYUSDT', 190, 1, 500)
+# single_test('BTCUSDT', 190, 1, 500)
 
-# walk_forward(s, c, 120000, 10000)
+# walk_forward(s, c, 80000, 2000)
 
-forward_run('BNBUSDT', 120000, 10000, 'win rate')
-
-# price, days = load_data('ADAUSDT', '1m')
-# df = create_bricks(70) # size is in basis points
-#
-# draw_bars(df)
+forward_run('BTCUSDT', 80000, 2000, 'win rate')
 
 #TODO it seems as though 1 brick confirmation is best in almost all situations, so at some point i will have to rewrite
 # everything to remove all references to the optimisation of confs

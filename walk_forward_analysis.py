@@ -1,9 +1,10 @@
 from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
+import statistics
 
 def load_results(pair):
-    folder = Path(f'V:/results/renko_static_ohlc/walk-forward/sizes10-1000-5_confs1-2/{pair}')
+    folder = Path(f'V:/results/renko_static_ohlc/walk-forward/80k-2k/sizes10-600-5_confs1-2/{pair}')
     files_list = list(folder.glob('*.csv'))
     set_num_list = [int(file.stem[6:]) for file in files_list]
     names_list = [file.name for file in files_list]
@@ -31,25 +32,47 @@ def get_best(metric):
             results[i] = prev # (None, None)
     return results
 
-df_dict = load_results('BNBUSDT')
+pair = 'BNBUSDT'
+
+df_dict = load_results(pair)
 # print(df_dict.get(1).columns)
 sqn_results = get_best('sqn')
 winrate_results = get_best('win rate')
-pnl_results = get_best('pnl per day')
 
-t = []
 s = []
 repeat = 0
+count = 0
 for keys,values in sqn_results.items():
-    t.append(keys)
-    # print(type(values))
-    s.append(values)
+    if values:
+        s.append(values)
+        repeat = values
+    else:
+        s.append(repeat)
+        count += 1
 
-print(s)
+t = []
+med = 5
+for i in range(len(s)):
+    if i == 0:
+        t.append(s[i])
+    elif i <= med:
+        x = round(statistics.mean(s[:i]))
+        t.append(x)
+    else:
+        x = round(statistics.mean(s[i-med:i]))
+        t.append(x)
 
-plt.plot(s)
+
+
+print(f'Total values: {len(s)} Nones fixed: {count}')
+print(s[:10])
+print(t[:10])
+
+plt.plot(s, label='size')
+plt.plot(t, label='med')
 
 plt.xlabel('Period')
 plt.ylabel('Brick Size')
-plt.title('BTCUSDT')
+plt.title(f'{pair}')
+plt.legend()
 plt.show()
