@@ -11,10 +11,15 @@ import time
 
 ### define functions
 
-def create_pairs_list(quote):
-    stored_files_path = Path(f'V:/ohlc_data/')
-    files_list = list(stored_files_path.glob(f'*{quote}-1m-data.csv'))
-    pairs = [str(pair)[13:-12] for pair in files_list]
+def create_pairs_list(quote, source='ohlc'):
+    if source == 'ohlc':
+        stored_files_path = Path(f'V:/ohlc_data/')
+        files_list = list(stored_files_path.glob(f'*{quote}-1m-data.csv'))
+        pairs = [str(pair)[13:-12] for pair in files_list]
+    else:
+        folders_list = list(source.iterdir())
+        pairs = [str(pair.stem) for pair in folders_list]
+
 
     return pairs
 
@@ -523,11 +528,12 @@ def calculate(signals, days):
 
         print(f'{len(equity_curve)} round-trip trades, Profit: {profit:.6}%')
         print(f'SQN: {sqn:.3}, win rate: {winrate}%, avg trades/day: {trades_per_day:.3}, avg profit/day: {prof_per_day:.3}%')
-        # return equity_curve
+        return {'SQN': sqn, 'win rate': winrate, 'avg trades/day': trades_per_day, 'avg profit/day': prof_per_day}
 
 ### draw_bars plots the renko bricks on a chart
 def draw_bars(data, num_bars=0):
     #TODO plot buys and sells on the chart by either colouring the relevant bricks or some other indicator
+    # from matplotlib.lines import Line2D
 
 
     # get the last num_bars
@@ -653,7 +659,7 @@ def walk_forward(s, c, train_length, test_length, printout=False):
     print(f'Time taken: {seconds // 60} minutes, {seconds % 60} seconds')
 
 def load_results(pair, train_str):
-    folder = Path(f'V:/results/renko_static_ohlc/walk-forward/{train_str}/sizes10-600-5_confs1-2/{pair}')
+    folder = Path(f'V:/results/renko_static_ohlc/walk-forward/{train_str}/{params}/{pair}')
     files_list = list(folder.glob('*.csv'))
     set_num_list = [int(file.stem[6:]) for file in files_list]
     names_list = [file.name for file in files_list]
@@ -688,7 +694,7 @@ def plot_eq(eq_curve, pair, metric):
     plt.title(f'{pair} optimised by {metric}')
     plt.show()
 
-def forward_run(pair, train_length, test_length, metric):
+def forward_run(pair, train_length, test_length, metric, single_run=True, printout=False):
 
     # this function needs to create bricks according to the settings for each training period, then run a single backtest of those bricks
 
@@ -698,11 +704,13 @@ def forward_run(pair, train_length, test_length, metric):
     vol = vol[train_length:]
     days = len(price) / 1440
     train_string = f'{train_length // 1000}k-{test_length // 1000}k'
-    # print(train_string)
+    if printout:
+        print(train_string)
 
     # call load_results to get walk-forward test results
     df_dict = load_results(pair, train_string)
-    print(df_dict)
+    if printout:
+        print(f'df_dict: {df_dict}')
 
     # call get_best to get settings for each period for a particular metric
     best = get_best(metric, df_dict)
@@ -710,23 +718,55 @@ def forward_run(pair, train_length, test_length, metric):
 
     # call create create_bricks_forward to generate the renko chart
     bricks = create_bricks_forward(best, price, vol, test_length)
-    print(bricks)
+    if printout:
+        print(f'bricks: {bricks}')
 
     # call backtest_one to generate the signals
     backtest = backtest_one(1, bricks, price, vol)
-    # print(f'backtest: {backtest}')
-
-    #TODO the eq curve in calculate works, the one in backtest doesn't. backtest is the important one because that's
-    # where the liquidity limiter is. get the one in backtest working, then remove the one in calculate
+    if printout:
+        print(f'backtest: {backtest}')
 
     # call calculate to generate final results
-    calculate(backtest, days)
+    fwd_results = calculate(backtest, days)
 
     # call draw_bricks to draw renko chart
-    draw_bars(bricks, 500)
+    if single_run:
+        draw_bars(bricks, 500)
+        # chart the equity curves of the different optimisation metrics
+        plot_eq(backtest.get('equity curve'), pair, metric)
 
-    # chart the equity curves of the different optimisation metrics
-    plot_eq(backtest.get('equity curve'), pair, metric)
+    return fwd_results
+
+def forward_run_all(train_length, test_length):
+    train_string = f'{train_length//1000}k-{test_length//1000}k'
+    source = Path(f'V:/results/renko_static_ohlc/walk-forward/{train_string}/{params}')
+    pairs_list = create_pairs_list('USDT', source)
+    metrics = ['sqn', 'win rate', 'pnl per day', 'avg run', 'score']
+    results = {}
+    for metric in metrics:
+        print(f'running {metric} tests')
+        results[metric] = {}
+        for pair in pairs_list:
+            # print(f'running {pair} tests')
+            final_results = forward_run(pair, train_length, test_length, metric, single_run=False)
+            results[metric][pair] = final_results
+            # print(f'results dictionary: {results}')
+
+    sqn_df = pd.DataFrame(results['sqn'])
+    winrate_df = pd.DataFrame(results['win rate'])
+    pnl_df = pd.DataFrame(results['pnl per day'])
+    avg_run_df = pd.DataFrame(results['avg run'])
+    score_df = pd.DataFrame(results['score'])
+
+    res_path = Path(f'V:/results/renko_static_ohlc/forward-run/{train_string}/{params}')
+    res_path.mkdir(parents=True, exist_ok=True)
+
+    sqn_df.to_csv(res_path / 'sqn.csv')
+    winrate_df.to_csv(res_path / 'winrate.csv')
+    pnl_df.to_csv(res_path / 'pnl_per_day.csv')
+    avg_run_df.to_csv(res_path / 'avg_run.csv')
+    score_df.to_csv(res_path / 'score.csv')
+
 
 ### run tests
 
@@ -746,9 +786,11 @@ params = f'sizes{s_low}-{s_hi}-{s_step}_confs{c_low}-{c_hi}'
 
 # single_test('BTCUSDT', 190, 1, 500)
 
-walk_forward(s, c, 80000, 2000)
+# walk_forward(s, c, 80000, 2000)
 
-# forward_run('BTCUSDT', 80000, 2000, 'win rate')
+# forward_run('ARDRUSDT', 80000, 2000, 'sqn')
+
+forward_run_all(80000, 2000)
 
 #TODO it seems as though 1 brick confirmation is best in almost all situations, so at some point i will have to rewrite
 # everything to remove all references to the optimisation of confs
