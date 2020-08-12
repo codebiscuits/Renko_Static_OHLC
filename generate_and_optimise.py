@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patch
+from matplotlib.lines import Line2D
 import math
 import statistics
 import time
@@ -260,6 +261,7 @@ def backtest_one(confs, bricks, price, tot_vol, printout=False):
             #     prev = 0  # update prev
             if initial_buy_cond: # if the last 'num' bricks were green and preceded by none
                 ohlc_index = index_list[i] + 1
+                how_many = 0 # for recording how many ohlc periods it takes to fill the order
                 # print(f'ohlc_index before: {ohlc_index}') ####
                 trade_vol = 0
                 asset = cash * comm / close_list[i]
@@ -268,16 +270,18 @@ def backtest_one(confs, bricks, price, tot_vol, printout=False):
                     trade_vol += vol_list[ohlc_index]
                     trade_vol /= 2  # volume figures are for buys and sells combined, i can only draw on half the liquidity
                     ohlc_index += 1
+                    how_many += 1
                 # print(f'ohlc_index after: {ohlc_index}, trade_vol: {trade_vol}, cash: {cash}')
                 asset = cash * comm / price[ohlc_index]
                 if printout:
                     print(f'bought {asset:.2f} units at {price[ohlc_index]}, commision: {(fees * cash):.3f}')
-                trade_list.append((i, 'b', price[ohlc_index]))  # record a buy signal
+                trade_list.append((i, 'b', price[ohlc_index], ohlc_index, how_many))  # record a buy signal
                 position = 'long'
                 prev = 1  # update prev
         if sell_condition:  # if the last 'num' bricks were red and preceded by a green
             if index_list[i] + 1 < len(price):
                 ohlc_index = index_list[i] + 1 # this line causes out of index error on its own
+                how_many = 0
             else:
                 break
             # print(f'ohlc_index before: {ohlc_index}') ####
@@ -288,17 +292,19 @@ def backtest_one(confs, bricks, price, tot_vol, printout=False):
                 mins += 1
                 trade_vol += vol_list[ohlc_index] / 2  # volume figures are for buys and sells combined, i can only draw on half the liquidity
                 ohlc_index += 1
+                how_many += 1
             # print(f'ohlc_index after: {ohlc_index}, trade_vol: {trade_vol}, cash: {cash}')
             cash = comm * asset * price[ohlc_index]
             equity_curve.append(cash)
             if printout:
                 print(f'sold {asset:.2f} units at {price[ohlc_index]}, commision: {(fees * cash):.3f}')
-            trade_list.append((i, 's', price[ohlc_index]))  # record a sell signal
+            trade_list.append((i, 's', price[ohlc_index], ohlc_index, how_many))  # record a sell signal
             position = 'short'
             prev = 0  # update prev
         if buy_condition:  # if the last 'num' bricks were green and preceded by a red
             if index_list[i] + 1 < len(price):
                 ohlc_index = index_list[i] + 1 # this line causes out of index error on its own
+                how_many = 0
             else:
                 break
             # print(f'ohlc_index before: {ohlc_index}') ####
@@ -310,11 +316,12 @@ def backtest_one(confs, bricks, price, tot_vol, printout=False):
                 mins += 1
                 trade_vol += vol_list[ohlc_index] / 2  # volume figures are for buys and sells combined, i can only draw on half the liquidity
                 ohlc_index += 1
+                how_many += 1
             # print(f'ohlc_index after: {ohlc_index}, trade_vol: {trade_vol}, cash: {cash}')
             asset = cash * comm / price[ohlc_index]
             if printout:
                 print(f'bought {asset:.2f} units at {price[ohlc_index]}, commision: {(fees * cash):.3f}')
-            trade_list.append((i, 'b', price[ohlc_index]))  # record a buy signal
+            trade_list.append((i, 'b', price[ohlc_index], ohlc_index, how_many))  # record a buy signal
             position = 'long'
             prev = 1  # update prev
         if printout:
@@ -528,13 +535,10 @@ def calculate(signals, days):
 
         print(f'{len(equity_curve)} round-trip trades, Profit: {profit:.6}%')
         print(f'SQN: {sqn:.3}, win rate: {winrate}%, avg trades/day: {trades_per_day:.3}, avg profit/day: {prof_per_day:.3}%')
-        return {'SQN': sqn, 'win rate': winrate, 'avg trades/day': trades_per_day, 'avg profit/day': prof_per_day}
+        return {'sqn': sqn, 'win rate': winrate, 'avg trades/day': trades_per_day, 'avg profit/day': prof_per_day}
 
 ### draw_bars plots the renko bricks on a chart
 def draw_bars(data, num_bars=0):
-    #TODO plot buys and sells on the chart by either colouring the relevant bricks or some other indicator
-    # from matplotlib.lines import Line2D
-
 
     # get the last num_bars
     if num_bars == 0:
@@ -549,7 +553,7 @@ def draw_bars(data, num_bars=0):
     fig.clf()
     axes = fig.gca()
 
-    # plot the bars, blue for 'up', red for 'down'
+    # plot the bars, green for 'up', red for 'down'
     index = 1
     for open_price, close_price in renkos:
         if (open_price < close_price):
@@ -570,6 +574,16 @@ def draw_bars(data, num_bars=0):
     plt.xlabel('Bar Number')
     plt.ylabel('Price')
     plt.grid(True)
+    plt.show()
+
+### draw_ohlc plots a price chart with trades marked to visualise what the strategy actually does
+def draw_ohlc(data, price, pair):
+    trades = data.get('trades')
+
+    plt.plot(price)
+
+    plt.ylabel('Price')
+    plt.title(f'{pair} trades')
     plt.show()
 
 ### single_test uses the above functions to test one set of params
@@ -695,7 +709,6 @@ def plot_eq(eq_curve, pair, metric):
     plt.show()
 
 def forward_run(pair, train_length, test_length, metric, single_run=True, printout=False):
-
     # this function needs to create bricks according to the settings for each training period, then run a single backtest of those bricks
 
     # call load_data to get price and vol data
@@ -726,18 +739,24 @@ def forward_run(pair, train_length, test_length, metric, single_run=True, printo
     if printout:
         print(f'backtest: {backtest}')
 
-    # call calculate to generate final results
+    # call calculate to generate final statistics
     fwd_results = calculate(backtest, days)
 
+    # call draw_ohlc to plot trades on ohlc chart
     # call draw_bricks to draw renko chart
     if single_run:
-        draw_bars(bricks, 500)
+        draw_ohlc(backtest, price, pair)
+        # draw_bars(bricks, 500)
         # chart the equity curves of the different optimisation metrics
         plot_eq(backtest.get('equity curve'), pair, metric)
+        #TODO get draw_ohlc and plot_eq as subplots of the same chart
 
     return fwd_results
 
 def forward_run_all(train_length, test_length):
+    print(f'Starting tests at {time.ctime()[11:-8]}')
+    start = time.perf_counter()
+
     train_string = f'{train_length//1000}k-{test_length//1000}k'
     source = Path(f'V:/results/renko_static_ohlc/walk-forward/{train_string}/{params}')
     pairs_list = create_pairs_list('USDT', source)
@@ -767,6 +786,10 @@ def forward_run_all(train_length, test_length):
     avg_run_df.to_csv(res_path / 'avg_run.csv')
     score_df.to_csv(res_path / 'score.csv')
 
+    end = time.perf_counter()
+    seconds = round(end - start)
+    print(f'Time taken: {seconds // 60} minutes, {seconds % 60} seconds')
+
 
 ### run tests
 
@@ -788,7 +811,7 @@ params = f'sizes{s_low}-{s_hi}-{s_step}_confs{c_low}-{c_hi}'
 
 # walk_forward(s, c, 80000, 2000)
 
-# forward_run('ARDRUSDT', 80000, 2000, 'sqn')
+# forward_run('BTCUSDT', 80000, 2000, 'score')
 
 forward_run_all(80000, 2000)
 
